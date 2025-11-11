@@ -142,6 +142,9 @@ npm install
 # Build
 npm run build
 
+# Run integration tests
+npm test
+
 # Run linter
 npm run lint
 
@@ -152,21 +155,40 @@ npm run lint:fix
 npm run watch
 ```
 
+### Testing
+
+The project includes integration tests that verify the MCP server works correctly:
+
+```bash
+# Run the integration test
+npm test
+```
+
+The integration test:
+- Verifies the server can start successfully
+- Tests MCP protocol communication
+- Lists all available tools
+- Does not execute actual image operations
+
+A GitHub Actions workflow also runs these tests on every push and pull request.
+
 ### Project Structure
 
 ```
 nanobanana-mcp/
 ├── src/
-│   └── index.ts          # Main server implementation
-├── dist/                 # Compiled output (generated)
+│   └── index.ts              # Main server implementation
+├── dist/                     # Compiled output (generated)
 ├── .github/
 │   └── workflows/
-│       └── publish.yml   # CI/CD workflow
-├── package.json          # Package configuration
-├── tsconfig.json         # TypeScript configuration
-├── .eslintrc.json        # ESLint configuration
-├── .gitignore           # Git ignore rules
-└── README.md            # This file
+│       ├── publish.yml       # CI/CD workflow
+│       └── integration-test.yml  # Integration test workflow
+├── package.json              # Package configuration
+├── tsconfig.json             # TypeScript configuration
+├── .eslintrc.json            # ESLint configuration
+├── .gitignore                # Git ignore rules
+├── test-integration.js       # Integration test script
+└── README.md                 # This file
 ```
 
 ## Publishing
@@ -179,10 +201,11 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
-The GitHub Actions workflow will:
+The GitHub Actions workflows will:
 1. Run linting
 2. Build the project
-3. Publish to npm (if pushing a version tag)
+3. Run integration tests
+4. Publish to npm (if pushing a version tag)
 
 ## License
 

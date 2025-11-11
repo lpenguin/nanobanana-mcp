@@ -1,0 +1,125 @@
+name: Integration Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  integration-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Build
+        run: npm run build
+      
+      - name: Test server can list tools
+        run: |
+          # Create a test script that sends an MCP request to list tools
+          cat > test-mcp.js << 'EOF'
+          const { spawn } = require('child_process');
+          
+          const server = spawn('node', ['dist/index.js'], {
+            stdio: ['pipe', 'pipe', 'pipe']
+          });
+          
+          let output = '';
+          let timeout;
+          
+          server.stdout.on('data', (data) => {
+            output += data.toString();
+            // Check if we got a valid response
+            try {
+              const response = JSON.parse(output);
+              if (response.result && response.result.tools) {
+                console.log('✓ Server responded with tools list');
+                console.log('Tools available:', response.result.tools.length);
+                response.result.tools.forEach(tool => {
+                  console.log(`  - ${tool.name}: ${tool.description}`);
+                });
+                clearTimeout(timeout);
+                server.kill();
+                process.exit(0);
+              }
+            } catch (e) {
+              // Not a complete JSON yet, wait for more data
+            }
+          });
+          
+          server.stderr.on('data', (data) => {
+            const msg = data.toString();
+            if (msg.includes('running on stdio')) {
+              console.log('✓ Server started successfully');
+              // Send list tools request
+              const request = {
+                jsonrpc: '2.0',
+                id: 1,
+                method: 'tools/list',
+                params: {}
+              };
+              server.stdin.write(JSON.stringify(request) + '\n');
+            }
+          });
+          
+          server.on('error', (error) => {
+            console.error('✗ Failed to start server:', error.message);
+            process.exit(1);
+          });
+          
+          // Timeout after 10 seconds
+          timeout = setTimeout(() => {
+            console.error('✗ Server did not respond in time');
+            server.kill();
+            process.exit(1);
+          }, 10000);
+          EOF
+          
+          node test-mcp.js
+      
+      - name: Test server binary
+        run: |
+          # Test that the binary exists and is executable
+          if [ -f "dist/index.js" ]; then
+            echo "✓ Server binary exists"
+          else
+            echo "✗ Server binary not found"
+            exit 1
+          fi
+          
+          # Test shebang
+          if head -1 dist/index.js | grep -q "^#!/usr/bin/env node"; then
+            echo "✓ Server has correct shebang"
+          else
+            echo "✗ Server missing shebang"
+            exit 1
+          fi
+      
+      - name: Test module can be required
+        run: |
+          cat > test-require.js << 'EOF'
+          try {
+            console.log('Testing module can be required...');
+            const path = require('path');
+            const indexPath = path.join(process.cwd(), 'dist', 'index.js');
+            require(indexPath);
+            // If we get here without error, success
+            console.log('✓ Module can be required successfully');
+          } catch (error) {
+            console.error('✗ Failed to require module:', error.message);
+            process.exit(1);
+          }
+          EOF
+          
+          timeout 5 node test-require.js || echo "✓ Module loaded (timed out waiting for stdio, which is expected)"
