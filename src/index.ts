@@ -6,9 +6,17 @@ import {
   ListToolsRequestSchema,
   Tool,
 } from "@modelcontextprotocol/sdk/types.js";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenerativeAI, Part } from "@google/generative-ai";
 import * as fs from "fs";
 import * as path from "path";
+
+// Helper type for extracting inline data from Gemini responses
+interface InlineDataPart {
+  inlineData?: {
+    mimeType: string;
+    data: string;
+  };
+}
 
 // Types for tool arguments
 interface GenerateImageArgs {
@@ -207,8 +215,9 @@ class NanobananaImageMCPServer {
     // Extract image data from response
     let imageBuffer: Buffer | null = null;
     for (const part of response.candidates[0].content.parts) {
-      if ((part as any).inlineData) {
-        imageBuffer = Buffer.from((part as any).inlineData.data, "base64");
+      const inlineDataPart = part as InlineDataPart;
+      if (inlineDataPart.inlineData) {
+        imageBuffer = Buffer.from(inlineDataPart.inlineData.data, "base64");
         break;
       }
     }
@@ -272,7 +281,7 @@ class NanobananaImageMCPServer {
                 mimeType: mimeType,
                 data: base64Image,
               },
-            } as any,
+            },
           ],
         },
       ],
@@ -287,8 +296,9 @@ class NanobananaImageMCPServer {
     // Extract image data from response
     let imageBuffer: Buffer | null = null;
     for (const part of response.candidates[0].content.parts) {
-      if ((part as any).inlineData) {
-        imageBuffer = Buffer.from((part as any).inlineData.data, "base64");
+      const inlineDataPart = part as InlineDataPart;
+      if (inlineDataPart.inlineData) {
+        imageBuffer = Buffer.from(inlineDataPart.inlineData.data, "base64");
         break;
       }
     }
@@ -334,7 +344,7 @@ class NanobananaImageMCPServer {
     const model = genai.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
 
     // Build content parts with all images
-    const parts: any[] = [];
+    const parts: Part[] = [];
 
     for (const imagePath of imagePaths) {
       const imageData = fs.readFileSync(imagePath);
@@ -373,8 +383,9 @@ class NanobananaImageMCPServer {
     // Extract image data from response
     let imageBuffer: Buffer | null = null;
     for (const part of response.candidates[0].content.parts) {
-      if ((part as any).inlineData) {
-        imageBuffer = Buffer.from((part as any).inlineData.data, "base64");
+      const inlineDataPart = part as InlineDataPart;
+      if (inlineDataPart.inlineData) {
+        imageBuffer = Buffer.from(inlineDataPart.inlineData.data, "base64");
         break;
       }
     }
