@@ -1,15 +1,19 @@
 # nanobanana-mcp
 
-A Model Context Protocol (MCP) server for creating and editing images. Built with TypeScript, this server provides powerful image manipulation capabilities through a simple MCP interface.
+A Model Context Protocol (MCP) server for creating and editing images using Google's Gemini 2.5 Flash Image model (nicknamed "nanobanana"). Built with TypeScript, this server provides powerful AI-driven image generation and manipulation capabilities through a simple MCP interface.
 
 ## Features
 
-- **Create Images**: Generate new images with custom dimensions and background colors
-- **Draw Text**: Add text to images with customizable fonts, sizes, and colors
-- **Draw Shapes**: Draw rectangles and other shapes on images
-- **Resize Images**: Scale images to specific dimensions with various fit modes
-- **Apply Filters**: Apply effects like grayscale, blur, sharpen, negate, and rotate
-- **Composite Images**: Overlay images on top of each other
+- **Text-to-Image Generation**: Create high-quality images from detailed text descriptions
+- **Image Editing**: Modify existing images using natural language prompts
+- **Multi-Image Composition**: Combine multiple images into creative compositions
+- **Flexible Aspect Ratios**: Support for various aspect ratios (1:1, 16:9, 9:16, and more)
+- **Powered by Google Gemini**: Uses the state-of-the-art Gemini 2.5 Flash Image model
+
+## Prerequisites
+
+- Node.js >= 18.0.0
+- A Google Gemini API key (get one from [Google AI Studio](https://aistudio.google.com/app/apikey))
 
 ## Installation
 
@@ -23,6 +27,16 @@ Or install locally in your project:
 npm install @lpenguin/nanobanana-mcp
 ```
 
+## Configuration
+
+Set your Google Gemini API key as an environment variable:
+
+```bash
+export GEMINI_API_KEY="your-api-key-here"
+# or
+export GOOGLE_API_KEY="your-api-key-here"
+```
+
 ## Usage
 
 ### As an MCP Server
@@ -34,7 +48,10 @@ Add to your MCP client configuration:
   "mcpServers": {
     "nanobanana": {
       "command": "npx",
-      "args": ["@lpenguin/nanobanana-mcp"]
+      "args": ["@lpenguin/nanobanana-mcp"],
+      "env": {
+        "GEMINI_API_KEY": "your-api-key-here"
+      }
     }
   }
 }
@@ -46,7 +63,10 @@ Or if installed globally:
 {
   "mcpServers": {
     "nanobanana": {
-      "command": "nanobanana-mcp"
+      "command": "nanobanana-mcp",
+      "env": {
+        "GEMINI_API_KEY": "your-api-key-here"
+      }
     }
   }
 }
@@ -54,80 +74,94 @@ Or if installed globally:
 
 ### Available Tools
 
-#### create_image
-Create a new image with specified dimensions and background color.
+#### generate_image
+
+Generate a new image from a text prompt using Google's Gemini 2.5 Flash Image model.
 
 **Parameters:**
-- `width` (number, required): Width in pixels
-- `height` (number, required): Height in pixels
-- `backgroundColor` (string, optional): Background color (default: "white")
-- `format` (string, optional): Output format - "png", "jpeg", or "webp" (default: "png")
-- `outputPath` (string, required): Path to save the image
+- `prompt` (string, required): Detailed text description of the image to generate. Be specific about style, composition, lighting, colors, and mood.
+- `outputPath` (string, required): Path to save the generated image (PNG format)
+- `aspectRatio` (string, optional): Aspect ratio for the image - "1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9" (default: "1:1")
 
-#### draw_text
-Draw text on an existing image or create a new one.
+**Example:**
+```javascript
+{
+  "prompt": "A photorealistic close-up portrait of an elderly Japanese ceramicist with deep, sun-etched wrinkles and a warm, knowing smile. He is carefully inspecting a freshly glazed tea bowl. The setting is his rustic, sun-drenched workshop. The scene is illuminated by soft, golden hour light streaming through a window.",
+  "outputPath": "./images/ceramicist.png",
+  "aspectRatio": "4:3"
+}
+```
 
-**Parameters:**
-- `inputPath` (string, optional): Path to input image
-- `outputPath` (string, required): Path to save output
-- `text` (string, required): Text to draw
-- `x` (number, optional): X coordinate (default: 10)
-- `y` (number, optional): Y coordinate (default: 30)
-- `fontSize` (number, optional): Font size in pixels (default: 20)
-- `fontFamily` (string, optional): Font family (default: "Arial")
-- `color` (string, optional): Text color (default: "black")
-- `width` (number, optional): Width for new image if no input (default: 800)
-- `height` (number, optional): Height for new image if no input (default: 600)
+#### edit_image
 
-#### draw_rectangle
-Draw a rectangle on an image.
+Edit an existing image using text prompts. Add, remove, or modify elements while preserving the original style and composition.
 
 **Parameters:**
-- `inputPath` (string, required): Path to input image
-- `outputPath` (string, required): Path to save output
-- `x` (number, required): X coordinate of top-left corner
-- `y` (number, required): Y coordinate of top-left corner
-- `width` (number, required): Width of rectangle
-- `height` (number, required): Height of rectangle
-- `fillColor` (string, optional): Fill color
-- `strokeColor` (string, optional): Stroke color (default: "black")
-- `lineWidth` (number, optional): Line width (default: 2)
+- `inputPath` (string, required): Path to the input image file
+- `prompt` (string, required): Detailed description of what to change, add, or remove. Be specific about preserving unchanged elements.
+- `outputPath` (string, required): Path to save the edited image (PNG format)
+- `aspectRatio` (string, optional): Aspect ratio for the output image (default: matches input)
 
-#### resize_image
-Resize an image to specified dimensions.
-
-**Parameters:**
-- `inputPath` (string, required): Path to input image
-- `outputPath` (string, required): Path to save output
-- `width` (number, optional): Target width in pixels
-- `height` (number, optional): Target height in pixels
-- `fit` (string, optional): Resize mode - "cover", "contain", "fill", "inside", or "outside" (default: "cover")
-
-#### apply_filter
-Apply a filter or effect to an image.
-
-**Parameters:**
-- `inputPath` (string, required): Path to input image
-- `outputPath` (string, required): Path to save output
-- `filter` (string, required): Filter to apply - "grayscale", "blur", "sharpen", "negate", or "rotate"
-- `options` (object, optional): Filter-specific options (e.g., `{sigma: 5}` for blur, `{angle: 90}` for rotate)
+**Example:**
+```javascript
+{
+  "inputPath": "./images/cat.png",
+  "prompt": "Add a small, knitted wizard hat on the cat's head. Make it look like it's sitting comfortably and matches the soft lighting of the photo.",
+  "outputPath": "./images/cat_with_hat.png"
+}
+```
 
 #### composite_images
-Overlay one image on top of another.
+
+Combine multiple images into a single composition using text prompts. Perfect for product mockups, style transfer, and creative collages.
 
 **Parameters:**
-- `backgroundPath` (string, required): Path to background image
-- `overlayPath` (string, required): Path to overlay image
-- `outputPath` (string, required): Path to save output
-- `x` (number, optional): X position of overlay (default: 0)
-- `y` (number, optional): Y position of overlay (default: 0)
+- `imagePaths` (array of strings, required): Array of paths to input images (up to 3 images recommended)
+- `prompt` (string, required): Detailed description of how to combine the images. Reference images by their order (first, second, third).
+- `outputPath` (string, required): Path to save the composite image (PNG format)
+- `aspectRatio` (string, optional): Aspect ratio for the output image (default: "1:1")
+
+**Example:**
+```javascript
+{
+  "imagePaths": ["./images/dress.png", "./images/model.png"],
+  "prompt": "Create a professional e-commerce fashion photo. Take the blue floral dress from the first image and let the woman from the second image wear it. Generate a realistic, full-body shot.",
+  "outputPath": "./images/fashion_shot.png",
+  "aspectRatio": "2:3"
+}
+```
+
+## Prompting Tips
+
+For best results when generating or editing images:
+
+1. **Be Descriptive**: Use detailed, narrative descriptions rather than keyword lists
+2. **Specify Style**: Mention artistic style, photography terms, lighting, and mood
+3. **Use Photography Terms**: For realistic images, mention camera angles, lens types, and lighting
+4. **Preserve Details**: When editing, explicitly state what should remain unchanged
+5. **Reference Order**: When compositing, refer to images as "first", "second", "third"
+
+### Example Prompts
+
+**Photorealistic:**
+```
+A photorealistic close-up portrait of an elderly Japanese ceramicist with deep, 
+sun-etched wrinkles and a warm, knowing smile. Captured with an 85mm portrait lens.
+```
+
+**Stylized:**
+```
+A kawaii-style sticker of a happy red panda wearing a tiny bamboo hat. Bold, clean 
+outlines, simple cel-shading, vibrant color palette. White background.
+```
+
+**Logo/Text:**
+```
+Create a modern, minimalist logo for a coffee shop called 'The Daily Grind'. 
+Clean, bold, sans-serif font. Simple coffee bean icon. Black and white.
+```
 
 ## Development
-
-### Prerequisites
-
-- Node.js >= 18.0.0
-- npm
 
 ### Setup
 
@@ -142,7 +176,7 @@ npm install
 # Build
 npm run build
 
-# Run integration tests
+# Run integration tests (requires GEMINI_API_KEY)
 npm test
 
 # Run linter
@@ -160,6 +194,9 @@ npm run watch
 The project includes integration tests that verify the MCP server works correctly:
 
 ```bash
+# Set your API key
+export GEMINI_API_KEY="your-api-key-here"
+
 # Run the integration test
 npm test
 ```
@@ -168,7 +205,7 @@ The integration test:
 - Verifies the server can start successfully
 - Tests MCP protocol communication
 - Lists all available tools
-- Does not execute actual image operations
+- Does not execute actual image operations (no API calls)
 
 A GitHub Actions workflow also runs these tests on every push and pull request.
 
@@ -191,6 +228,34 @@ nanobanana-mcp/
 └── README.md                 # This file
 ```
 
+## About Gemini 2.5 Flash Image (Nanobanana)
+
+This MCP server uses Google's Gemini 2.5 Flash Image model, nicknamed "nanobanana" by the developer community. Key features:
+
+- **Text-to-Image**: Generate images from descriptions
+- **Image Editing**: Add, remove, or modify elements conversationally
+- **Multi-Image Composition**: Combine multiple images
+- **Iterative Refinement**: Make progressive adjustments
+- **High-Fidelity Text**: Accurate text rendering in images
+- **SynthID Watermark**: All generated images include a watermark
+
+## Aspect Ratios
+
+Supported aspect ratios and their resolutions:
+
+| Aspect Ratio | Resolution | Use Case |
+|--------------|------------|----------|
+| 1:1 | 1024x1024 | Square images, social media |
+| 2:3 | 832x1248 | Portrait photography |
+| 3:2 | 1248x832 | Landscape photography |
+| 3:4 | 864x1184 | Portrait mode |
+| 4:3 | 1184x864 | Standard display |
+| 4:5 | 896x1152 | Instagram portrait |
+| 5:4 | 1152x896 | Medium format |
+| 9:16 | 768x1344 | Vertical video, stories |
+| 16:9 | 1344x768 | Widescreen, presentations |
+| 21:9 | 1536x672 | Ultra-wide, cinematic |
+
 ## Publishing
 
 The package is automatically published to npm when a new version tag is pushed:
@@ -206,6 +271,28 @@ The GitHub Actions workflows will:
 2. Build the project
 3. Run integration tests
 4. Publish to npm (if pushing a version tag)
+
+## API Costs
+
+Image generation with Gemini 2.5 Flash Image is token-based:
+- $30 per 1 million tokens for image output
+- Each image output is tokenized at 1290 tokens (flat rate, up to 1024x1024px)
+- Approximately $0.039 per image
+
+## Limitations
+
+- Best performance with English, Spanish (MX), Japanese, Chinese, and Hindi
+- Image generation does not support audio or video inputs
+- Model works best with up to 3 input images for composition
+- Uploading images of children not supported in EEA, CH, and UK
+- All generated images include a SynthID watermark
+
+## Resources
+
+- [Google Gemini API Documentation](https://ai.google.dev/gemini-api/docs/image-generation)
+- [Get API Key](https://aistudio.google.com/app/apikey)
+- [Gemini Models Overview](https://ai.google.dev/gemini-api/docs/models/gemini)
+- [Image Generation Cookbook](https://colab.sandbox.google.com/github/google-gemini/cookbook/blob/main/quickstarts/Image_out.ipynb)
 
 ## License
 

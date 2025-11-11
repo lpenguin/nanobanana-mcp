@@ -1,7 +1,7 @@
 {
   "name": "@lpenguin/nanobanana-mcp",
   "version": "0.1.0",
-  "description": "MCP server for creating and editing images",
+  "description": "MCP server for creating and editing images using Google's Gemini 2.5 Flash Image model (nanobanana)",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
@@ -35,8 +35,7 @@
   ],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.4",
-    "canvas": "^2.11.2",
-    "sharp": "^0.33.5"
+    "@google/generative-ai": "^0.24.1"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
