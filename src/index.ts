@@ -148,10 +148,10 @@ class NanobananaImageMCPServer {
 
   private getGeminiClient(): GoogleGenerativeAI {
     if (!this.genai) {
-      const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+      const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey) {
         throw new Error(
-          "GEMINI_API_KEY or GOOGLE_API_KEY environment variable is required. " +
+          "GEMINI_API_KEY environment variable is required. " +
           "Get your API key from https://aistudio.google.com/app/apikey"
         );
       }

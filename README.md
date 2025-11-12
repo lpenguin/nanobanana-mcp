@@ -33,8 +33,6 @@ Set your Google Gemini API key as an environment variable:
 
 ```bash
 export GEMINI_API_KEY="your-api-key-here"
-# or
-export GOOGLE_API_KEY="your-api-key-here"
 ```
 
 ## Usage
