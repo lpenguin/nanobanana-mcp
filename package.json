@@ -34,8 +34,8 @@
     "README.md"
   ],
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.4",
-    "@google/generative-ai": "^0.24.1"
+    "@google/genai": "^1.29.0",
+    "@modelcontextprotocol/sdk": "^1.0.4"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",

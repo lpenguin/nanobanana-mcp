@@ -6,7 +6,7 @@ import {
   ListToolsRequestSchema,
   Tool,
 } from "@modelcontextprotocol/sdk/types.js";
-import { GoogleGenerativeAI, Part } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -128,7 +128,7 @@ const TOOLS: Tool[] = [
 // Server implementation
 class NanobananaImageMCPServer {
   private server: Server;
-  private genai: GoogleGenerativeAI | null = null;
+  private genai: GoogleGenAI | null = null;
 
   constructor() {
     this.server = new Server(
@@ -146,7 +146,7 @@ class NanobananaImageMCPServer {
     this.setupHandlers();
   }
 
-  private getGeminiClient(): GoogleGenerativeAI {
+  private getGeminiClient(): GoogleGenAI {
     if (!this.genai) {
       const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey) {
@@ -155,7 +155,7 @@ class NanobananaImageMCPServer {
           "Get your API key from https://aistudio.google.com/app/apikey"
         );
       }
-      this.genai = new GoogleGenerativeAI(apiKey);
+      this.genai = new GoogleGenAI({ apiKey });
     }
     return this.genai;
   }
@@ -200,21 +200,26 @@ class NanobananaImageMCPServer {
     const { prompt, outputPath, aspectRatio = "1:1" } = args;
 
     const genai = this.getGeminiClient();
-    const model = genai.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
 
-    const result = await model.generateContent({
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
+    const result = await genai.models.generateContent({
+      model: "gemini-2.5-flash-image-preview",
+      contents: prompt,
     });
 
-    const response = result.response;
+    const response = result;
 
     if (!response.candidates || response.candidates.length === 0) {
       throw new Error("No candidates returned from Gemini API");
     }
 
+    const candidate = response.candidates[0];
+    if (!candidate.content || !candidate.content.parts) {
+      throw new Error("No content in response from Gemini API");
+    }
+
     // Extract image data from response
     let imageBuffer: Buffer | null = null;
-    for (const part of response.candidates[0].content.parts) {
+    for (const part of candidate.content.parts) {
       const inlineDataPart = part as InlineDataPart;
       if (inlineDataPart.inlineData) {
         imageBuffer = Buffer.from(inlineDataPart.inlineData.data, "base64");
@@ -258,7 +263,6 @@ class NanobananaImageMCPServer {
     const base64Image = imageData.toString("base64");
 
     const genai = this.getGeminiClient();
-    const model = genai.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
 
     // Determine MIME type from file extension
     const ext = path.extname(inputPath).toLowerCase();
@@ -270,32 +274,33 @@ class NanobananaImageMCPServer {
     };
     const mimeType = mimeTypeMap[ext] || "image/png";
 
-    const result = await model.generateContent({
+    const result = await genai.models.generateContent({
+      model: "gemini-2.5-flash-image-preview",
       contents: [
+        { text: prompt },
         {
-          role: "user",
-          parts: [
-            { text: prompt },
-            {
-              inlineData: {
-                mimeType: mimeType,
-                data: base64Image,
-              },
-            },
-          ],
+          inlineData: {
+            mimeType: mimeType,
+            data: base64Image,
+          },
         },
       ],
     });
 
-    const response = result.response;
+    const response = result;
 
     if (!response.candidates || response.candidates.length === 0) {
       throw new Error("No candidates returned from Gemini API");
     }
 
+    const candidate = response.candidates[0];
+    if (!candidate.content || !candidate.content.parts) {
+      throw new Error("No content in response from Gemini API");
+    }
+
     // Extract image data from response
     let imageBuffer: Buffer | null = null;
-    for (const part of response.candidates[0].content.parts) {
+    for (const part of candidate.content.parts) {
       const inlineDataPart = part as InlineDataPart;
       if (inlineDataPart.inlineData) {
         imageBuffer = Buffer.from(inlineDataPart.inlineData.data, "base64");
@@ -341,10 +346,12 @@ class NanobananaImageMCPServer {
     }
 
     const genai = this.getGeminiClient();
-    const model = genai.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
 
     // Build content parts with all images
-    const parts: Part[] = [];
+    const parts: any[] = [];
+
+    // Add the text prompt first
+    parts.push({ text: prompt });
 
     for (const imagePath of imagePaths) {
       const imageData = fs.readFileSync(imagePath);
@@ -367,22 +374,25 @@ class NanobananaImageMCPServer {
       });
     }
 
-    // Add the text prompt last
-    parts.push({ text: prompt });
-
-    const result = await model.generateContent({
-      contents: [{ role: "user", parts }],
+    const result = await genai.models.generateContent({
+      model: "gemini-2.5-flash-image-preview",
+      contents: parts,
     });
 
-    const response = result.response;
+    const response = result;
 
     if (!response.candidates || response.candidates.length === 0) {
       throw new Error("No candidates returned from Gemini API");
     }
 
+    const candidate = response.candidates[0];
+    if (!candidate.content || !candidate.content.parts) {
+      throw new Error("No content in response from Gemini API");
+    }
+
     // Extract image data from response
     let imageBuffer: Buffer | null = null;
-    for (const part of response.candidates[0].content.parts) {
+    for (const part of candidate.content.parts) {
       const inlineDataPart = part as InlineDataPart;
       if (inlineDataPart.inlineData) {
         imageBuffer = Buffer.from(inlineDataPart.inlineData.data, "base64");
