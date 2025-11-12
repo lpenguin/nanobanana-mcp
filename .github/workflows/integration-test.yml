@@ -1,0 +1,49 @@
+name: Integration Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  integration-test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Build
+        run: npm run build
+      
+      - name: Run integration tests
+        run: npm test
+      
+      - name: Test server binary
+        run: |
+          # Test that the binary exists and is executable
+          if [ -f "dist/index.js" ]; then
+            echo "✓ Server binary exists"
+          else
+            echo "✗ Server binary not found"
+            exit 1
+          fi
+          
+          # Test shebang
+          if head -1 dist/index.js | grep -q "^#!/usr/bin/env node"; then
+            echo "✓ Server has correct shebang"
+          else
+            echo "✗ Server missing shebang"
+            exit 1
+          fi

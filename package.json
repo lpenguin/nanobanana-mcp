@@ -1,0 +1,50 @@
+{
+  "name": "@lpenguin/nanobanana-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for creating and editing images using Google's Gemini 2.5 Flash Image model (nanobanana)",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "nanobanana-mcp": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "lint": "eslint . --ext .ts",
+    "lint:fix": "eslint . --ext .ts --fix",
+    "test": "node test-integration.js",
+    "prepare": "npm run build",
+    "watch": "tsc --watch"
+  },
+  "keywords": [
+    "mcp",
+    "mcp-server",
+    "image",
+    "image-editing",
+    "canvas",
+    "nanobanana"
+  ],
+  "author": "lpenguin",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lpenguin/nanobanana-mcp.git"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "@google/generative-ai": "^0.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@typescript-eslint/eslint-plugin": "^6.13.0",
+    "@typescript-eslint/parser": "^6.13.0",
+    "eslint": "^8.54.0",
+    "typescript": "^5.3.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
