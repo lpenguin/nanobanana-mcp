@@ -94,10 +94,10 @@ export async function handleHttpRequest(
     const response = await handler(request);
     await writeResponse(res, response);
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    console.error("HTTP transport error:", error);
     res.statusCode = 500;
     res.setHeader("content-type", "application/json");
-    res.end(JSON.stringify({ error: message }));
+    res.end(JSON.stringify({ error: "Internal server error" }));
   }
 }
 
