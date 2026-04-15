@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { createMcpHandler } from "mcp-handler";
 import { GoogleGenAI } from "@google/genai";
+import { put } from "@vercel/blob";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -42,19 +43,24 @@ async function extractImageBuffer(
   throw new Error("No image data returned from Gemini API");
 }
 
-function saveImage(outputPath: string, buffer: Buffer): void {
-  const dir = path.dirname(outputPath);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-  fs.writeFileSync(outputPath, buffer);
+async function uploadImageToBlob(buffer: Buffer, filename: string): Promise<string> {
+  const blob = await put(filename, buffer, {
+    access: "public",
+    contentType: "image/png",
+  });
+  return blob.url;
+}
+
+function generateFilename(prefix: string): string {
+  const random = Math.random().toString(36).slice(2, 8);
+  return `${prefix}-${Date.now()}-${random}.png`;
 }
 
 const handler = createMcpHandler(
   (server) => {
     server.tool(
       "generate_image",
-      "Generate a new image from a text prompt using Google's Gemini 2.5 Flash Image model (nanobanana). Perfect for creating photorealistic scenes, illustrations, logos, product mockups, and more.",
+      "Generate a new image from a text prompt using Google's Gemini 2.5 Flash Image model (nanobanana). The image is uploaded to Vercel Blob and the URL is returned.",
       {
         googleApiKey: z
           .string()
@@ -64,11 +70,8 @@ const handler = createMcpHandler(
           .describe(
             "Detailed text description of the image to generate. Be specific about style, composition, lighting, colors, and mood."
           ),
-        outputPath: z
-          .string()
-          .describe("Path to save the generated image file (PNG format)"),
       },
-      async ({ googleApiKey, prompt, outputPath }) => {
+      async ({ googleApiKey, prompt }) => {
         const genai = getGeminiClient(googleApiKey);
         const result = await genai.models.generateContent({
           model: "gemini-2.5-flash-image-preview",
@@ -79,13 +82,13 @@ const handler = createMcpHandler(
           throw new Error("No candidates returned from Gemini API");
         }
         const imageBuffer = await extractImageBuffer(result.candidates);
-        saveImage(outputPath, imageBuffer);
+        const url = await uploadImageToBlob(imageBuffer, generateFilename("generated"));
 
         return {
           content: [
             {
               type: "text" as const,
-              text: `Generated image saved to: ${outputPath}\nPrompt: ${prompt}`,
+              text: `Generated image URL: ${url}\nPrompt: ${prompt}`,
             },
           ],
         };
@@ -94,7 +97,7 @@ const handler = createMcpHandler(
 
     server.tool(
       "edit_image",
-      "Edit an existing image using text prompts with Google's Gemini 2.5 Flash Image model. Add, remove, or modify elements while preserving the original style and composition.",
+      "Edit an existing image using text prompts with Google's Gemini 2.5 Flash Image model. The edited image is uploaded to Vercel Blob and the URL is returned.",
       {
         googleApiKey: z
           .string()
@@ -105,11 +108,8 @@ const handler = createMcpHandler(
           .describe(
             "Detailed description of what to change, add, or remove from the image. Be specific about preserving unchanged elements."
           ),
-        outputPath: z
-          .string()
-          .describe("Path to save the edited image file (PNG format)"),
       },
-      async ({ googleApiKey, inputPath, prompt, outputPath }) => {
+      async ({ googleApiKey, inputPath, prompt }) => {
         if (!fs.existsSync(inputPath)) {
           throw new Error(`Input file not found: ${inputPath}`);
         }
@@ -132,13 +132,13 @@ const handler = createMcpHandler(
           throw new Error("No candidates returned from Gemini API");
         }
         const imageBuffer = await extractImageBuffer(result.candidates);
-        saveImage(outputPath, imageBuffer);
+        const url = await uploadImageToBlob(imageBuffer, generateFilename("edited"));
 
         return {
           content: [
             {
               type: "text" as const,
-              text: `Edited image saved to: ${outputPath}\nInput: ${inputPath}\nEdit: ${prompt}`,
+              text: `Edited image URL: ${url}\nInput: ${inputPath}\nEdit: ${prompt}`,
             },
           ],
         };
@@ -147,7 +147,7 @@ const handler = createMcpHandler(
 
     server.tool(
       "composite_images",
-      "Combine multiple images into a single composition using text prompts with Google's Gemini 2.5 Flash Image model. Perfect for product mockups, style transfer, and creative collages.",
+      "Combine multiple images into a single composition using text prompts with Google's Gemini 2.5 Flash Image model. The composite image is uploaded to Vercel Blob and the URL is returned.",
       {
         googleApiKey: z
           .string()
@@ -160,11 +160,8 @@ const handler = createMcpHandler(
           .describe(
             "Detailed description of how to combine the images. Reference images by their order (first, second, third)."
           ),
-        outputPath: z
-          .string()
-          .describe("Path to save the composite image file (PNG format)"),
       },
-      async ({ googleApiKey, imagePaths, prompt, outputPath }) => {
+      async ({ googleApiKey, imagePaths, prompt }) => {
         for (const imagePath of imagePaths) {
           if (!fs.existsSync(imagePath)) {
             throw new Error(`Input file not found: ${imagePath}`);
@@ -197,13 +194,13 @@ const handler = createMcpHandler(
           throw new Error("No candidates returned from Gemini API");
         }
         const imageBuffer = await extractImageBuffer(result.candidates);
-        saveImage(outputPath, imageBuffer);
+        const url = await uploadImageToBlob(imageBuffer, generateFilename("composite"));
 
         return {
           content: [
             {
               type: "text" as const,
-              text: `Composite image saved to: ${outputPath}\nInput images: ${imagePaths.join(", ")}\nComposition: ${prompt}`,
+              text: `Composite image URL: ${url}\nInput images: ${imagePaths.join(", ")}\nComposition: ${prompt}`,
             },
           ],
         };
