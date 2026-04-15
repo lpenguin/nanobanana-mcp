@@ -237,6 +237,22 @@ const baseHandler = createMcpHandler(
 function withGoogleApiKey(handler: (req: Request) => Promise<Response>) {
   return (req: Request): Promise<Response> => {
     const apiKey = req.headers.get("GOOGLE_API_KEY");
+    if (req.method === "POST" && !apiKey) {
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            jsonrpc: "2.0",
+            error: {
+              code: -32600,
+              message:
+                "GOOGLE_API_KEY header is required. Pass your Google Gemini API key via the GOOGLE_API_KEY HTTP header.",
+            },
+            id: null,
+          }),
+          { status: 401, headers: { "Content-Type": "application/json" } }
+        )
+      );
+    }
     return googleApiKeyStorage.run(apiKey, () => handler(req));
   };
 }
