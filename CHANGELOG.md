@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.7](https://github.com/lpenguin/nanobanana-mcp/compare/v0.1.6...v0.1.7) (2026-04-15)
+
+
+### Features
+
+* accept Google API key via GOOGLE_API_KEY HTTP header ([#7](https://github.com/lpenguin/nanobanana-mcp/issues/7)) ([85bc55b](https://github.com/lpenguin/nanobanana-mcp/commit/85bc55b982963b51cf85fe8bdae88e7a29f70a5d))
+
 ### [0.1.6](https://github.com/lpenguin/nanobanana-mcp/compare/v0.1.5...v0.1.6) (2026-04-15)
 
 
