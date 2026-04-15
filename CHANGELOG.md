@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.5](https://github.com/lpenguin/nanobanana-mcp/compare/v0.1.4...v0.1.5) (2026-04-15)
+
+
+### Features
+
+* add Vercel support with HTTP MCP handler at /mcp route ([#5](https://github.com/lpenguin/nanobanana-mcp/issues/5)) ([fbcef27](https://github.com/lpenguin/nanobanana-mcp/commit/fbcef276df8b7944d2c43c43a1445e64b04a4b60))
+
 ### [0.1.4](https://github.com/lpenguin/nanobanana-mcp/compare/v0.1.2...v0.1.4) (2025-11-12)
 
 
