@@ -90,7 +90,7 @@ const handler = createMcpHandler(
       async ({ googleApiKey, prompt, model }) => {
         const genai = getGeminiClient(googleApiKey);
         const result = await genai.models.generateContent({
-          model: model ?? DEFAULT_MODEL,
+          model,
           contents: prompt,
         });
 
@@ -138,7 +138,7 @@ const handler = createMcpHandler(
 
         const genai = getGeminiClient(googleApiKey);
         const result = await genai.models.generateContent({
-          model: model ?? DEFAULT_MODEL,
+          model,
           contents: [
             { text: prompt },
             { inlineData: { mimeType, data: base64Image } },
@@ -204,7 +204,7 @@ const handler = createMcpHandler(
 
         const genai = getGeminiClient(googleApiKey);
         const result = await genai.models.generateContent({
-          model: model ?? DEFAULT_MODEL,
+          model,
           contents: parts,
         });
 
