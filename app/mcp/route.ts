@@ -110,7 +110,7 @@ const baseHandler = createMcpHandler(
           content: [
             {
               type: "text" as const,
-              text: `Generated image URL: ${url}\nPrompt: ${prompt}`,
+              text: url,
             },
           ],
         };
@@ -158,7 +158,7 @@ const baseHandler = createMcpHandler(
           content: [
             {
               type: "text" as const,
-              text: `Edited image URL: ${url}\nInput: ${inputPath}\nEdit: ${prompt}`,
+              text: url,
             },
           ],
         };
@@ -218,7 +218,7 @@ const baseHandler = createMcpHandler(
           content: [
             {
               type: "text" as const,
-              text: `Composite image URL: ${url}\nInput images: ${imagePaths.join(", ")}\nComposition: ${prompt}`,
+              text: url,
             },
           ],
         };
