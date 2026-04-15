@@ -6,6 +6,10 @@ dist/
 build/
 *.tsbuildinfo
 
+# Next.js build output
+.next/
+next-env.d.ts
+
 # Logs
 logs/
 *.log
