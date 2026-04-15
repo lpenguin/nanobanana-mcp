@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.6](https://github.com/lpenguin/nanobanana-mcp/compare/v0.1.5...v0.1.6) (2026-04-15)
+
+
+### Features
+
+* add model selection argument to MCP route tools ([#6](https://github.com/lpenguin/nanobanana-mcp/issues/6)) ([d52344c](https://github.com/lpenguin/nanobanana-mcp/commit/d52344cd32c3f564c15d85eb5dd12e3c6e417a20))
+
 ### [0.1.5](https://github.com/lpenguin/nanobanana-mcp/compare/v0.1.4...v0.1.5) (2026-04-15)
 
 
