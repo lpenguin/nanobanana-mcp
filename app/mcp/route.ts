@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "async_hooks";
 import { z } from "zod";
 import { createMcpHandler } from "mcp-handler";
 import { GoogleGenAI } from "@google/genai";
@@ -20,7 +21,15 @@ const MIME_TYPE_MAP: Record<string, string> = {
   ".webp": "image/webp",
 };
 
-function getGeminiClient(apiKey: string): GoogleGenAI {
+const googleApiKeyStorage = new AsyncLocalStorage<string | null>();
+
+function getGeminiClient(): GoogleGenAI {
+  const apiKey = googleApiKeyStorage.getStore();
+  if (!apiKey) {
+    throw new Error(
+      "GOOGLE_API_KEY header is required. Pass your Google Gemini API key via the GOOGLE_API_KEY HTTP header."
+    );
+  }
   return new GoogleGenAI({ apiKey });
 }
 
@@ -71,15 +80,12 @@ const modelSchema = z
     `Gemini model to use for image generation. Allowed values: ${ALLOWED_MODELS.join(", ")}. Default: ${DEFAULT_MODEL}`
   );
 
-const handler = createMcpHandler(
+const baseHandler = createMcpHandler(
   (server) => {
     server.tool(
       "generate_image",
       "Generate a new image from a text prompt using Google's Gemini image model (nanobanana). The image is uploaded to Vercel Blob and the URL is returned.",
       {
-        googleApiKey: z
-          .string()
-          .describe("Google Gemini API key. Get one at https://aistudio.google.com/app/apikey"),
         prompt: z
           .string()
           .describe(
@@ -87,8 +93,8 @@ const handler = createMcpHandler(
           ),
         model: modelSchema,
       },
-      async ({ googleApiKey, prompt, model }) => {
-        const genai = getGeminiClient(googleApiKey);
+      async ({ prompt, model }) => {
+        const genai = getGeminiClient();
         const result = await genai.models.generateContent({
           model,
           contents: prompt,
@@ -104,7 +110,7 @@ const handler = createMcpHandler(
           content: [
             {
               type: "text" as const,
-              text: `Generated image URL: ${url}\nPrompt: ${prompt}`,
+              text: url,
             },
           ],
         };
@@ -115,9 +121,6 @@ const handler = createMcpHandler(
       "edit_image",
       "Edit an existing image using text prompts with Google's Gemini image model. The edited image is uploaded to Vercel Blob and the URL is returned.",
       {
-        googleApiKey: z
-          .string()
-          .describe("Google Gemini API key. Get one at https://aistudio.google.com/app/apikey"),
         inputPath: z.string().describe("Path to the input image file"),
         prompt: z
           .string()
@@ -126,7 +129,7 @@ const handler = createMcpHandler(
           ),
         model: modelSchema,
       },
-      async ({ googleApiKey, inputPath, prompt, model }) => {
+      async ({ inputPath, prompt, model }) => {
         if (!fs.existsSync(inputPath)) {
           throw new Error(`Input file not found: ${inputPath}`);
         }
@@ -136,7 +139,7 @@ const handler = createMcpHandler(
         const ext = path.extname(inputPath).toLowerCase();
         const mimeType = MIME_TYPE_MAP[ext] || "image/png";
 
-        const genai = getGeminiClient(googleApiKey);
+        const genai = getGeminiClient();
         const result = await genai.models.generateContent({
           model,
           contents: [
@@ -155,7 +158,7 @@ const handler = createMcpHandler(
           content: [
             {
               type: "text" as const,
-              text: `Edited image URL: ${url}\nInput: ${inputPath}\nEdit: ${prompt}`,
+              text: url,
             },
           ],
         };
@@ -166,9 +169,6 @@ const handler = createMcpHandler(
       "composite_images",
       "Combine multiple images into a single composition using text prompts with Google's Gemini image model. The composite image is uploaded to Vercel Blob and the URL is returned.",
       {
-        googleApiKey: z
-          .string()
-          .describe("Google Gemini API key. Get one at https://aistudio.google.com/app/apikey"),
         imagePaths: z
           .array(z.string())
           .describe("Array of paths to input images (up to 3 images recommended)"),
@@ -179,7 +179,7 @@ const handler = createMcpHandler(
           ),
         model: modelSchema,
       },
-      async ({ googleApiKey, imagePaths, prompt, model }) => {
+      async ({ imagePaths, prompt, model }) => {
         for (const imagePath of imagePaths) {
           if (!fs.existsSync(imagePath)) {
             throw new Error(`Input file not found: ${imagePath}`);
@@ -202,7 +202,7 @@ const handler = createMcpHandler(
           parts.push({ inlineData: { mimeType, data: base64Image } });
         }
 
-        const genai = getGeminiClient(googleApiKey);
+        const genai = getGeminiClient();
         const result = await genai.models.generateContent({
           model,
           contents: parts,
@@ -218,7 +218,7 @@ const handler = createMcpHandler(
           content: [
             {
               type: "text" as const,
-              text: `Composite image URL: ${url}\nInput images: ${imagePaths.join(", ")}\nComposition: ${prompt}`,
+              text: url,
             },
           ],
         };
@@ -234,4 +234,31 @@ const handler = createMcpHandler(
   { basePath: "" }
 );
 
-export { handler as GET, handler as POST, handler as DELETE };
+function withGoogleApiKey(handler: (req: Request) => Promise<Response>) {
+  return (req: Request): Promise<Response> => {
+    const apiKey = req.headers.get("GOOGLE_API_KEY");
+    if (req.method === "POST" && !apiKey) {
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            jsonrpc: "2.0",
+            error: {
+              code: -32600,
+              message:
+                "GOOGLE_API_KEY header is required. Pass your Google Gemini API key via the GOOGLE_API_KEY HTTP header.",
+            },
+            id: null,
+          }),
+          { status: 401, headers: { "Content-Type": "application/json" } }
+        )
+      );
+    }
+    return googleApiKeyStorage.run(apiKey, () => handler(req));
+  };
+}
+
+const GET = withGoogleApiKey(baseHandler);
+const POST = withGoogleApiKey(baseHandler);
+const DELETE = withGoogleApiKey(baseHandler);
+
+export { GET, POST, DELETE };
