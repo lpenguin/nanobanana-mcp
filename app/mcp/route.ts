@@ -56,11 +56,26 @@ function generateFilename(prefix: string): string {
   return `${prefix}-${Date.now()}-${random}.png`;
 }
 
+const ALLOWED_MODELS = [
+  "gemini-3.1-flash-image-preview",
+  "gemini-3-pro-image-preview",
+  "gemini-2.5-flash-image",
+] as const;
+
+const DEFAULT_MODEL = "gemini-3.1-flash-image-preview";
+
+const modelSchema = z
+  .enum(ALLOWED_MODELS)
+  .default(DEFAULT_MODEL)
+  .describe(
+    `Gemini model to use for image generation. Allowed values: ${ALLOWED_MODELS.join(", ")}. Default: ${DEFAULT_MODEL}`
+  );
+
 const handler = createMcpHandler(
   (server) => {
     server.tool(
       "generate_image",
-      "Generate a new image from a text prompt using Google's Gemini 2.5 Flash Image model (nanobanana). The image is uploaded to Vercel Blob and the URL is returned.",
+      "Generate a new image from a text prompt using Google's Gemini image model (nanobanana). The image is uploaded to Vercel Blob and the URL is returned.",
       {
         googleApiKey: z
           .string()
@@ -70,11 +85,12 @@ const handler = createMcpHandler(
           .describe(
             "Detailed text description of the image to generate. Be specific about style, composition, lighting, colors, and mood."
           ),
+        model: modelSchema,
       },
-      async ({ googleApiKey, prompt }) => {
+      async ({ googleApiKey, prompt, model }) => {
         const genai = getGeminiClient(googleApiKey);
         const result = await genai.models.generateContent({
-          model: "gemini-2.5-flash-image-preview",
+          model: model ?? DEFAULT_MODEL,
           contents: prompt,
         });
 
@@ -97,7 +113,7 @@ const handler = createMcpHandler(
 
     server.tool(
       "edit_image",
-      "Edit an existing image using text prompts with Google's Gemini 2.5 Flash Image model. The edited image is uploaded to Vercel Blob and the URL is returned.",
+      "Edit an existing image using text prompts with Google's Gemini image model. The edited image is uploaded to Vercel Blob and the URL is returned.",
       {
         googleApiKey: z
           .string()
@@ -108,8 +124,9 @@ const handler = createMcpHandler(
           .describe(
             "Detailed description of what to change, add, or remove from the image. Be specific about preserving unchanged elements."
           ),
+        model: modelSchema,
       },
-      async ({ googleApiKey, inputPath, prompt }) => {
+      async ({ googleApiKey, inputPath, prompt, model }) => {
         if (!fs.existsSync(inputPath)) {
           throw new Error(`Input file not found: ${inputPath}`);
         }
@@ -121,7 +138,7 @@ const handler = createMcpHandler(
 
         const genai = getGeminiClient(googleApiKey);
         const result = await genai.models.generateContent({
-          model: "gemini-2.5-flash-image-preview",
+          model: model ?? DEFAULT_MODEL,
           contents: [
             { text: prompt },
             { inlineData: { mimeType, data: base64Image } },
@@ -147,7 +164,7 @@ const handler = createMcpHandler(
 
     server.tool(
       "composite_images",
-      "Combine multiple images into a single composition using text prompts with Google's Gemini 2.5 Flash Image model. The composite image is uploaded to Vercel Blob and the URL is returned.",
+      "Combine multiple images into a single composition using text prompts with Google's Gemini image model. The composite image is uploaded to Vercel Blob and the URL is returned.",
       {
         googleApiKey: z
           .string()
@@ -160,8 +177,9 @@ const handler = createMcpHandler(
           .describe(
             "Detailed description of how to combine the images. Reference images by their order (first, second, third)."
           ),
+        model: modelSchema,
       },
-      async ({ googleApiKey, imagePaths, prompt }) => {
+      async ({ googleApiKey, imagePaths, prompt, model }) => {
         for (const imagePath of imagePaths) {
           if (!fs.existsSync(imagePath)) {
             throw new Error(`Input file not found: ${imagePath}`);
@@ -186,7 +204,7 @@ const handler = createMcpHandler(
 
         const genai = getGeminiClient(googleApiKey);
         const result = await genai.models.generateContent({
-          model: "gemini-2.5-flash-image-preview",
+          model: model ?? DEFAULT_MODEL,
           contents: parts,
         });
 
