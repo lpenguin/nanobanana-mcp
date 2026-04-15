@@ -12,25 +12,6 @@ interface InlineDataPart {
   };
 }
 
-const ASPECT_RATIO_VALUES = [
-  "1:1",
-  "2:3",
-  "3:2",
-  "3:4",
-  "4:3",
-  "4:5",
-  "5:4",
-  "9:16",
-  "16:9",
-  "21:9",
-] as const;
-
-const aspectRatioSchema = z
-  .enum(ASPECT_RATIO_VALUES)
-  .optional()
-  .default("1:1")
-  .describe("Aspect ratio for the generated image (default: 1:1)");
-
 const MIME_TYPE_MAP: Record<string, string> = {
   ".png": "image/png",
   ".jpg": "image/jpeg",
@@ -86,9 +67,8 @@ const handler = createMcpHandler(
         outputPath: z
           .string()
           .describe("Path to save the generated image file (PNG format)"),
-        aspectRatio: aspectRatioSchema,
       },
-      async ({ googleApiKey, prompt, outputPath, aspectRatio = "1:1" }) => {
+      async ({ googleApiKey, prompt, outputPath }) => {
         const genai = getGeminiClient(googleApiKey);
         const result = await genai.models.generateContent({
           model: "gemini-2.5-flash-image-preview",
@@ -105,7 +85,7 @@ const handler = createMcpHandler(
           content: [
             {
               type: "text" as const,
-              text: `Generated image saved to: ${outputPath}\nAspect ratio: ${aspectRatio}\nPrompt: ${prompt}`,
+              text: `Generated image saved to: ${outputPath}\nPrompt: ${prompt}`,
             },
           ],
         };
@@ -128,10 +108,6 @@ const handler = createMcpHandler(
         outputPath: z
           .string()
           .describe("Path to save the edited image file (PNG format)"),
-        aspectRatio: z
-          .enum(ASPECT_RATIO_VALUES)
-          .optional()
-          .describe("Aspect ratio for the output image (default: matches input)"),
       },
       async ({ googleApiKey, inputPath, prompt, outputPath }) => {
         if (!fs.existsSync(inputPath)) {
@@ -187,9 +163,8 @@ const handler = createMcpHandler(
         outputPath: z
           .string()
           .describe("Path to save the composite image file (PNG format)"),
-        aspectRatio: aspectRatioSchema,
       },
-      async ({ googleApiKey, imagePaths, prompt, outputPath, aspectRatio = "1:1" }) => {
+      async ({ googleApiKey, imagePaths, prompt, outputPath }) => {
         for (const imagePath of imagePaths) {
           if (!fs.existsSync(imagePath)) {
             throw new Error(`Input file not found: ${imagePath}`);
@@ -228,7 +203,7 @@ const handler = createMcpHandler(
           content: [
             {
               type: "text" as const,
-              text: `Composite image saved to: ${outputPath}\nInput images: ${imagePaths.join(", ")}\nComposition: ${prompt}\nAspect ratio: ${aspectRatio}`,
+              text: `Composite image saved to: ${outputPath}\nInput images: ${imagePaths.join(", ")}\nComposition: ${prompt}`,
             },
           ],
         };
