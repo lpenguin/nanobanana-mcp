@@ -1,108 +1,130 @@
 #!/usr/bin/env node
 
-/**
- * Integration test for nanobanana-mcp server
- * Tests that the server can start and respond to MCP protocol requests
- * without actually executing any image operations
- */
-
-const { spawn } = require('child_process');
-const path = require('path');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const { spawn } = require('node:child_process');
 
 console.log('Starting nanobanana-mcp integration test...\n');
 
-// Test 1: Verify the build output exists
-console.log('Test 1: Checking build output...');
-const fs = require('fs');
 const indexPath = path.join(__dirname, 'dist', 'index.js');
-if (!fs.existsSync(indexPath)) {
-  console.error('✗ Build output not found. Run "npm run build" first.');
-  process.exit(1);
-}
-console.log('✓ Build output exists\n');
 
-// Test 2: Start the server and test MCP protocol
-console.log('Test 2: Testing MCP protocol...');
-const server = spawn('node', [indexPath], {
-  stdio: ['pipe', 'pipe', 'pipe']
-});
+function waitForOutput(stream, matcher, timeoutMs, label) {
+  return new Promise((resolve, reject) => {
+    let output = '';
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error(`Timed out waiting for ${label}. Output so far:\n${output}`));
+    }, timeoutMs);
 
-let output = '';
-let timeout;
-let serverStarted = false;
-
-server.stdout.on('data', (data) => {
-  output += data.toString();
-  
-  // Try to parse JSON response
-  const lines = output.split('\n');
-  for (const line of lines) {
-    if (line.trim()) {
-      try {
-        const response = JSON.parse(line);
-        if (response.result && response.result.tools) {
-          console.log('✓ Server responded with tools list');
-          console.log(`✓ Found ${response.result.tools.length} tools:\n`);
-          
-          response.result.tools.forEach(tool => {
-            console.log(`  • ${tool.name}`);
-            console.log(`    ${tool.description}`);
-            console.log('');
-          });
-          
-          console.log('✓ All integration tests passed!');
-          clearTimeout(timeout);
-          server.kill();
-          process.exit(0);
-        }
-      } catch (e) {
-        // Not JSON or incomplete, continue
+    const onData = (chunk) => {
+      output += chunk.toString();
+      if (matcher.test(output)) {
+        cleanup();
+        resolve(output);
       }
-    }
-  }
-});
-
-server.stderr.on('data', (data) => {
-  const msg = data.toString();
-  if (msg.includes('running on stdio')) {
-    console.log('✓ Server started successfully');
-    serverStarted = true;
-    
-    // Send list tools request
-    const request = {
-      jsonrpc: '2.0',
-      id: 1,
-      method: 'tools/list',
-      params: {}
     };
-    
-    console.log('✓ Sending tools/list request\n');
-    server.stdin.write(JSON.stringify(request) + '\n');
-  } else {
-    // Only show stderr if it's not the expected startup message
-    if (!msg.includes('running on stdio')) {
-      console.error('Server stderr:', msg);
-    }
+
+    const cleanup = () => {
+      clearTimeout(timeout);
+      stream.off('data', onData);
+    };
+
+    stream.on('data', onData);
+  });
+}
+
+async function testStdioTransport() {
+  console.log('Test 2: Testing stdio transport...');
+
+  const [{ Client }, { StdioClientTransport }] = await Promise.all([
+    import('@modelcontextprotocol/sdk/client/index.js'),
+    import('@modelcontextprotocol/sdk/client/stdio.js'),
+  ]);
+
+  const transport = new StdioClientTransport({
+    command: 'node',
+    args: [indexPath],
+    cwd: __dirname,
+    stderr: 'pipe',
+  });
+
+  const stderrChunks = [];
+  if (transport.stderr) {
+    transport.stderr.on('data', (chunk) => {
+      stderrChunks.push(chunk.toString());
+    });
   }
-});
 
-server.on('error', (error) => {
-  console.error('✗ Failed to start server:', error.message);
-  process.exit(1);
-});
+  const client = new Client({ name: 'integration-test-stdio', version: '1.0.0' });
+  await client.connect(transport);
+  const result = await client.listTools();
 
-server.on('exit', (code, signal) => {
-  if (!serverStarted) {
-    console.error('✗ Server exited before starting properly');
-    console.error(`  Exit code: ${code}, Signal: ${signal}`);
+  assert.equal(result.tools.length, 3, 'Expected exactly 3 tools over stdio');
+  const toolNames = result.tools.map((tool) => tool.name).sort();
+  assert.deepEqual(toolNames, ['composite_images', 'edit_image', 'generate_image']);
+
+  const generateTool = result.tools.find((tool) => tool.name === 'generate_image');
+  assert.ok(generateTool, 'generate_image tool should exist');
+  assert.ok(generateTool.inputSchema.properties.googleToken, 'generate_image should require googleToken');
+
+  await client.close();
+
+  console.log('✓ Server responded over stdio');
+  console.log(`✓ Found tools: ${toolNames.join(', ')}`);
+  console.log('✓ generate_image exposes googleToken\n');
+
+  const stderrOutput = stderrChunks.join('');
+  assert.match(stderrOutput, /running on stdio/i, 'Expected stdio startup log');
+}
+
+async function testHttpTransport() {
+  console.log('Test 3: Testing HTTP transport...');
+
+  const port = 3100;
+  const server = spawn('node', [indexPath, '--http', '--port', String(port)], {
+    cwd: __dirname,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  try {
+    await waitForOutput(server.stderr, /running on http:\/\/127\.0\.0\.1:3100\/api\/mcp/i, 15000, 'HTTP startup');
+
+    const [{ Client }, { StreamableHTTPClientTransport }] = await Promise.all([
+      import('@modelcontextprotocol/sdk/client/index.js'),
+      import('@modelcontextprotocol/sdk/client/streamableHttp.js'),
+    ]);
+
+    const client = new Client({ name: 'integration-test-http', version: '1.0.0' });
+    const transport = new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${port}/api/mcp`));
+
+    await client.connect(transport);
+    const result = await client.listTools();
+
+    assert.equal(result.tools.length, 3, 'Expected exactly 3 tools over HTTP');
+    assert.ok(result.tools.every((tool) => tool.inputSchema.properties.googleToken), 'Each HTTP tool should expose googleToken');
+
+    await client.close();
+    console.log('✓ Server responded over HTTP');
+    console.log('✓ All HTTP tools expose googleToken\n');
+  } finally {
+    server.kill();
+  }
+}
+
+(async () => {
+  console.log('Test 1: Checking build output...');
+  if (!fs.existsSync(indexPath)) {
+    console.error('✗ Build output not found. Run "npm run build" first.');
     process.exit(1);
   }
-});
+  console.log('✓ Build output exists\n');
 
-// Timeout after 10 seconds
-timeout = setTimeout(() => {
-  console.error('✗ Server did not respond in time');
-  console.error('  The server may have started but failed to respond to the tools/list request');
-  server.kill();
+  await testStdioTransport();
+  await testHttpTransport();
+
+  console.log('✓ All integration tests passed!');
+})().catch((error) => {
+  console.error('✗ Integration test failed:', error.message);
   process.exit(1);
-}, 10000);
+});

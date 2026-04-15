@@ -13,7 +13,9 @@
     "lint:fix": "eslint . --ext .ts --fix",
     "test": "node test-integration.js",
     "prepare": "npm run build",
-    "watch": "tsc --watch"
+    "watch": "tsc --watch",
+    "start:stdio": "node dist/index.js",
+    "start:http": "node dist/index.js --http"
   },
   "keywords": [
     "mcp",
@@ -35,7 +37,9 @@
   ],
   "dependencies": {
     "@google/genai": "^1.29.0",
-    "@modelcontextprotocol/sdk": "^1.0.4"
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "mcp-handler": "^1.1.0",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",

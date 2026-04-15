@@ -29,15 +29,12 @@ npm install @lpenguin/nanobanana-mcp
 
 ## Configuration
 
-Set your Google Gemini API key as an environment variable:
-
-```bash
-export GEMINI_API_KEY="your-api-key-here"
-```
+No OAuth or server-side token configuration is required.
+Pass your Google Gemini token as the `googleToken` argument on each tool call.
 
 ## Usage
 
-### As an MCP Server
+### Stdio MCP Server
 
 Add to your MCP client configuration:
 
@@ -46,10 +43,7 @@ Add to your MCP client configuration:
   "mcpServers": {
     "nanobanana": {
       "command": "npx",
-      "args": ["@lpenguin/nanobanana-mcp"],
-      "env": {
-        "GEMINI_API_KEY": "your-api-key-here"
-      }
+      "args": ["@lpenguin/nanobanana-mcp"]
     }
   }
 }
@@ -61,10 +55,43 @@ Or if installed globally:
 {
   "mcpServers": {
     "nanobanana": {
-      "command": "nanobanana-mcp",
-      "env": {
-        "GEMINI_API_KEY": "your-api-key-here"
-      }
+      "command": "nanobanana-mcp"
+    }
+  }
+}
+```
+
+### Local HTTP Server
+
+Run the streamable HTTP endpoint locally:
+
+```bash
+npm run build
+npm run start:http
+```
+
+The MCP endpoint will be available at:
+
+```text
+http://127.0.0.1:3000/api/mcp
+```
+
+### Vercel Deployment
+
+This repository includes a Vercel-compatible `api/mcp.ts` route backed by `mcp-handler`.
+After deploying to Vercel, connect MCP clients to:
+
+```text
+https://<your-project>.vercel.app/api/mcp
+```
+
+Example Cursor configuration:
+
+```json
+{
+  "mcpServers": {
+    "nanobanana": {
+      "url": "https://<your-project>.vercel.app/api/mcp"
     }
   }
 }
@@ -72,11 +99,14 @@ Or if installed globally:
 
 ### Available Tools
 
+All tools require `googleToken`, which should be your Google AI Studio API key/token for that specific call.
+
 #### generate_image
 
 Generate a new image from a text prompt using Google's Gemini 2.5 Flash Image model.
 
 **Parameters:**
+- `googleToken` (string, required): Google AI Studio API key/token used for this request
 - `prompt` (string, required): Detailed text description of the image to generate. Be specific about style, composition, lighting, colors, and mood.
 - `outputPath` (string, required): Path to save the generated image (PNG format)
 - `aspectRatio` (string, optional): Aspect ratio for the image - "1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9" (default: "1:1")
@@ -84,6 +114,7 @@ Generate a new image from a text prompt using Google's Gemini 2.5 Flash Image mo
 **Example:**
 ```javascript
 {
+  "googleToken": "your-google-token",
   "prompt": "A photorealistic close-up portrait of an elderly Japanese ceramicist with deep, sun-etched wrinkles and a warm, knowing smile. He is carefully inspecting a freshly glazed tea bowl. The setting is his rustic, sun-drenched workshop. The scene is illuminated by soft, golden hour light streaming through a window.",
   "outputPath": "./images/ceramicist.png",
   "aspectRatio": "4:3"
@@ -95,6 +126,7 @@ Generate a new image from a text prompt using Google's Gemini 2.5 Flash Image mo
 Edit an existing image using text prompts. Add, remove, or modify elements while preserving the original style and composition.
 
 **Parameters:**
+- `googleToken` (string, required): Google AI Studio API key/token used for this request
 - `inputPath` (string, required): Path to the input image file
 - `prompt` (string, required): Detailed description of what to change, add, or remove. Be specific about preserving unchanged elements.
 - `outputPath` (string, required): Path to save the edited image (PNG format)
@@ -103,6 +135,7 @@ Edit an existing image using text prompts. Add, remove, or modify elements while
 **Example:**
 ```javascript
 {
+  "googleToken": "your-google-token",
   "inputPath": "./images/cat.png",
   "prompt": "Add a small, knitted wizard hat on the cat's head. Make it look like it's sitting comfortably and matches the soft lighting of the photo.",
   "outputPath": "./images/cat_with_hat.png"
@@ -114,6 +147,7 @@ Edit an existing image using text prompts. Add, remove, or modify elements while
 Combine multiple images into a single composition using text prompts. Perfect for product mockups, style transfer, and creative collages.
 
 **Parameters:**
+- `googleToken` (string, required): Google AI Studio API key/token used for this request
 - `imagePaths` (array of strings, required): Array of paths to input images (up to 3 images recommended)
 - `prompt` (string, required): Detailed description of how to combine the images. Reference images by their order (first, second, third).
 - `outputPath` (string, required): Path to save the composite image (PNG format)
@@ -122,6 +156,7 @@ Combine multiple images into a single composition using text prompts. Perfect fo
 **Example:**
 ```javascript
 {
+  "googleToken": "your-google-token",
   "imagePaths": ["./images/dress.png", "./images/model.png"],
   "prompt": "Create a professional e-commerce fashion photo. Take the blue floral dress from the first image and let the woman from the second image wear it. Generate a realistic, full-body shot.",
   "outputPath": "./images/fashion_shot.png",
@@ -174,7 +209,13 @@ npm install
 # Build
 npm run build
 
-# Run integration tests (requires GEMINI_API_KEY)
+# Run the stdio server
+npm run start:stdio
+
+# Run the HTTP server locally
+npm run start:http
+
+# Run integration tests
 npm test
 
 # Run linter
@@ -189,21 +230,18 @@ npm run watch
 
 ### Testing
 
-The project includes integration tests that verify the MCP server works correctly:
+The project includes integration tests that verify both transports without calling the Google API:
 
 ```bash
-# Set your API key
-export GEMINI_API_KEY="your-api-key-here"
-
-# Run the integration test
 npm test
 ```
 
 The integration test:
-- Verifies the server can start successfully
-- Tests MCP protocol communication
-- Lists all available tools
-- Does not execute actual image operations (no API calls)
+- Verifies the compiled server exists
+- Connects to the stdio transport and lists tools
+- Connects to the HTTP transport at `/api/mcp` and lists tools
+- Confirms each tool requires `googleToken`
+- Does not execute actual image generation requests
 
 A GitHub Actions workflow also runs these tests on every push and pull request.
 
@@ -211,18 +249,22 @@ A GitHub Actions workflow also runs these tests on every push and pull request.
 
 ```
 nanobanana-mcp/
+├── api/
+│   └── mcp.ts                # Vercel MCP route
 ├── src/
-│   └── index.ts              # Main server implementation
+│   ├── http-server.ts        # Local HTTP server adapter
+│   ├── index.ts              # CLI entrypoint
+│   ├── mcp-handler.ts        # Shared mcp-handler setup
+│   └── nanobanana.ts         # Tool registration and Gemini logic
 ├── dist/                     # Compiled output (generated)
 ├── .github/
 │   └── workflows/
 │       ├── publish.yml       # CI/CD workflow
 │       └── integration-test.yml  # Integration test workflow
 ├── package.json              # Package configuration
-├── tsconfig.json             # TypeScript configuration
-├── .eslintrc.json            # ESLint configuration
-├── .gitignore                # Git ignore rules
 ├── test-integration.js       # Integration test script
+├── tsconfig.json             # TypeScript configuration
+├── vercel.json               # Vercel function configuration
 └── README.md                 # This file
 ```
 
