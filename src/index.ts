@@ -26,17 +26,38 @@ interface GenerateImageArgs {
 }
 
 interface EditImageArgs {
-  inputPath: string;
+  inputPath?: string;
+  imageUrl?: string;
   prompt: string;
   outputPath: string;
   aspectRatio?: "1:1" | "2:3" | "3:2" | "3:4" | "4:3" | "4:5" | "5:4" | "9:16" | "16:9" | "21:9";
 }
 
 interface CompositeImagesArgs {
-  imagePaths: string[];
+  imagePaths?: string[];
+  imageUrls?: string[];
   prompt: string;
   outputPath: string;
   aspectRatio?: "1:1" | "2:3" | "3:2" | "3:4" | "4:3" | "4:5" | "5:4" | "9:16" | "16:9" | "21:9";
+}
+
+async function loadImageFromUrl(imageUrl: string): Promise<{ base64: string; mimeType: string }> {
+  if (imageUrl.startsWith("data:")) {
+    const match = imageUrl.match(/^data:([^;]+);base64,(.+)$/);
+    if (!match) {
+      throw new Error(`Invalid data URL format`);
+    }
+    return { mimeType: match[1], base64: match[2] };
+  }
+  const response = await fetch(imageUrl);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch image from URL: ${imageUrl} (${response.status} ${response.statusText})`);
+  }
+  const contentType = response.headers.get("content-type") || "image/png";
+  const mimeType = contentType.split(";")[0].trim();
+  const arrayBuffer = await response.arrayBuffer();
+  const base64 = Buffer.from(arrayBuffer).toString("base64");
+  return { base64, mimeType };
 }
 
 // Tool definitions
@@ -73,7 +94,11 @@ const TOOLS: Tool[] = [
       properties: {
         inputPath: {
           type: "string",
-          description: "Path to the input image file",
+          description: "Path to the input image file (required if imageUrl is not provided)",
+        },
+        imageUrl: {
+          type: "string",
+          description: "URL of the input image (data URL or real URL). Required if inputPath is not provided.",
         },
         prompt: {
           type: "string",
@@ -89,7 +114,7 @@ const TOOLS: Tool[] = [
           description: "Aspect ratio for the output image (default: matches input)",
         },
       },
-      required: ["inputPath", "prompt", "outputPath"],
+      required: ["prompt", "outputPath"],
     },
   },
   {
@@ -103,7 +128,14 @@ const TOOLS: Tool[] = [
           items: {
             type: "string",
           },
-          description: "Array of paths to input images (up to 3 images recommended)",
+          description: "Array of paths to input images (up to 3 images recommended). Required if imageUrls is not provided.",
+        },
+        imageUrls: {
+          type: "array",
+          items: {
+            type: "string",
+          },
+          description: "Array of image URLs (data URLs or real URLs) to use as input (up to 3 images recommended). Required if imagePaths is not provided.",
         },
         prompt: {
           type: "string",
@@ -120,7 +152,7 @@ const TOOLS: Tool[] = [
           default: "1:1",
         },
       },
-      required: ["imagePaths", "prompt", "outputPath"],
+      required: ["prompt", "outputPath"],
     },
   },
 ];
@@ -251,28 +283,34 @@ class NanobananaImageMCPServer {
   }
 
   private async editImage(args: EditImageArgs) {
-    const { inputPath, prompt, outputPath } = args;
+    const { inputPath, imageUrl, prompt, outputPath } = args;
 
-    // Verify input file exists
-    if (!fs.existsSync(inputPath)) {
-      throw new Error(`Input file not found: ${inputPath}`);
+    let base64Image: string;
+    let mimeType: string;
+
+    if (imageUrl) {
+      const loaded = await loadImageFromUrl(imageUrl);
+      base64Image = loaded.base64;
+      mimeType = loaded.mimeType;
+    } else if (inputPath) {
+      if (!fs.existsSync(inputPath)) {
+        throw new Error(`Input file not found: ${inputPath}`);
+      }
+      const imageData = fs.readFileSync(inputPath);
+      base64Image = imageData.toString("base64");
+      const ext = path.extname(inputPath).toLowerCase();
+      const mimeTypeMap: Record<string, string> = {
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".webp": "image/webp",
+      };
+      mimeType = mimeTypeMap[ext] || "image/png";
+    } else {
+      throw new Error("Either inputPath or imageUrl must be provided");
     }
 
-    // Read input image
-    const imageData = fs.readFileSync(inputPath);
-    const base64Image = imageData.toString("base64");
-
     const genai = this.getGeminiClient();
-
-    // Determine MIME type from file extension
-    const ext = path.extname(inputPath).toLowerCase();
-    const mimeTypeMap: Record<string, string> = {
-      ".png": "image/png",
-      ".jpg": "image/jpeg",
-      ".jpeg": "image/jpeg",
-      ".webp": "image/webp",
-    };
-    const mimeType = mimeTypeMap[ext] || "image/png";
 
     const result = await genai.models.generateContent({
       model: "gemini-2.5-flash-image-preview",
@@ -321,18 +359,23 @@ class NanobananaImageMCPServer {
     // Save the edited image
     fs.writeFileSync(outputPath, imageBuffer);
 
+    const inputSource = imageUrl ?? inputPath;
     return {
       content: [
         {
           type: "text",
-          text: `Edited image saved to: ${outputPath}\nInput: ${inputPath}\nEdit: ${prompt}`,
+          text: `Edited image saved to: ${outputPath}\nInput: ${inputSource}\nEdit: ${prompt}`,
         },
       ],
     };
   }
 
   private async compositeImages(args: CompositeImagesArgs) {
-    const { imagePaths, prompt, outputPath } = args;
+    const { imagePaths = [], imageUrls = [], prompt, outputPath } = args;
+
+    if (imagePaths.length === 0 && imageUrls.length === 0) {
+      throw new Error("Either imagePaths or imageUrls must be provided");
+    }
 
     // Verify all input files exist
     for (const imagePath of imagePaths) {
@@ -341,7 +384,8 @@ class NanobananaImageMCPServer {
       }
     }
 
-    if (imagePaths.length > 3) {
+    const totalImages = imagePaths.length + imageUrls.length;
+    if (totalImages > 3) {
       console.error("Warning: More than 3 images provided. Model works best with up to 3 images.");
     }
 
@@ -372,6 +416,11 @@ class NanobananaImageMCPServer {
           data: base64Image,
         },
       });
+    }
+
+    for (const imageUrl of imageUrls) {
+      const { base64, mimeType } = await loadImageFromUrl(imageUrl);
+      parts.push({ inlineData: { mimeType, data: base64 } });
     }
 
     const result = await genai.models.generateContent({
@@ -413,11 +462,12 @@ class NanobananaImageMCPServer {
     // Save the composite image
     fs.writeFileSync(outputPath, imageBuffer);
 
+    const allInputs = [...imagePaths, ...imageUrls];
     return {
       content: [
         {
           type: "text",
-          text: `Composite image saved to: ${outputPath}\nInput images: ${imagePaths.join(", ")}\nComposition: ${prompt}`,
+          text: `Composite image saved to: ${outputPath}\nInput images: ${allInputs.join(", ")}\nComposition: ${prompt}`,
         },
       ],
     };

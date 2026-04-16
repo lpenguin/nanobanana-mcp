@@ -33,6 +33,25 @@ function getGeminiClient(): GoogleGenAI {
   return new GoogleGenAI({ apiKey });
 }
 
+async function loadImageFromUrl(imageUrl: string): Promise<{ base64: string; mimeType: string }> {
+  if (imageUrl.startsWith("data:")) {
+    const match = imageUrl.match(/^data:([^;]+);base64,(.+)$/);
+    if (!match) {
+      throw new Error(`Invalid data URL format`);
+    }
+    return { mimeType: match[1], base64: match[2] };
+  }
+  const response = await fetch(imageUrl);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch image from URL: ${imageUrl} (${response.status} ${response.statusText})`);
+  }
+  const contentType = response.headers.get("content-type") || "image/png";
+  const mimeType = contentType.split(";")[0].trim();
+  const arrayBuffer = await response.arrayBuffer();
+  const base64 = Buffer.from(arrayBuffer).toString("base64");
+  return { base64, mimeType };
+}
+
 async function extractImageBuffer(
   candidates: NonNullable<Awaited<ReturnType<GoogleGenAI["models"]["generateContent"]>>["candidates"]>
 ): Promise<Buffer> {
@@ -121,7 +140,8 @@ const baseHandler = createMcpHandler(
       "edit_image",
       "Edit an existing image using text prompts with Google's Gemini image model. The edited image is uploaded to Vercel Blob and the URL is returned.",
       {
-        inputPath: z.string().describe("Path to the input image file"),
+        inputPath: z.string().optional().describe("Path to the input image file (required if imageUrl is not provided)"),
+        imageUrl: z.string().optional().describe("URL of the input image (data URL or real URL). Required if inputPath is not provided."),
         prompt: z
           .string()
           .describe(
@@ -129,15 +149,25 @@ const baseHandler = createMcpHandler(
           ),
         model: modelSchema,
       },
-      async ({ inputPath, prompt, model }) => {
-        if (!fs.existsSync(inputPath)) {
-          throw new Error(`Input file not found: ${inputPath}`);
-        }
+      async ({ inputPath, imageUrl, prompt, model }) => {
+        let base64Image: string;
+        let mimeType: string;
 
-        const imageData = fs.readFileSync(inputPath);
-        const base64Image = imageData.toString("base64");
-        const ext = path.extname(inputPath).toLowerCase();
-        const mimeType = MIME_TYPE_MAP[ext] || "image/png";
+        if (imageUrl) {
+          const loaded = await loadImageFromUrl(imageUrl);
+          base64Image = loaded.base64;
+          mimeType = loaded.mimeType;
+        } else if (inputPath) {
+          if (!fs.existsSync(inputPath)) {
+            throw new Error(`Input file not found: ${inputPath}`);
+          }
+          const imageData = fs.readFileSync(inputPath);
+          base64Image = imageData.toString("base64");
+          const ext = path.extname(inputPath).toLowerCase();
+          mimeType = MIME_TYPE_MAP[ext] || "image/png";
+        } else {
+          throw new Error("Either inputPath or imageUrl must be provided");
+        }
 
         const genai = getGeminiClient();
         const result = await genai.models.generateContent({
@@ -171,7 +201,12 @@ const baseHandler = createMcpHandler(
       {
         imagePaths: z
           .array(z.string())
-          .describe("Array of paths to input images (up to 3 images recommended)"),
+          .optional()
+          .describe("Array of paths to input images (up to 3 images recommended). Required if imageUrls is not provided."),
+        imageUrls: z
+          .array(z.string())
+          .optional()
+          .describe("Array of image URLs (data URLs or real URLs) to use as input (up to 3 images recommended). Required if imagePaths is not provided."),
         prompt: z
           .string()
           .describe(
@@ -179,14 +214,19 @@ const baseHandler = createMcpHandler(
           ),
         model: modelSchema,
       },
-      async ({ imagePaths, prompt, model }) => {
+      async ({ imagePaths = [], imageUrls = [], prompt, model }) => {
+        if (imagePaths.length === 0 && imageUrls.length === 0) {
+          throw new Error("Either imagePaths or imageUrls must be provided");
+        }
+
         for (const imagePath of imagePaths) {
           if (!fs.existsSync(imagePath)) {
             throw new Error(`Input file not found: ${imagePath}`);
           }
         }
 
-        if (imagePaths.length > 3) {
+        const totalImages = imagePaths.length + imageUrls.length;
+        if (totalImages > 3) {
           console.warn(
             "Warning: More than 3 images provided. Model works best with up to 3 images."
           );
@@ -200,6 +240,11 @@ const baseHandler = createMcpHandler(
           const ext = path.extname(imagePath).toLowerCase();
           const mimeType = MIME_TYPE_MAP[ext] || "image/png";
           parts.push({ inlineData: { mimeType, data: base64Image } });
+        }
+
+        for (const imageUrl of imageUrls) {
+          const { base64, mimeType } = await loadImageFromUrl(imageUrl);
+          parts.push({ inlineData: { mimeType, data: base64 } });
         }
 
         const genai = getGeminiClient();
