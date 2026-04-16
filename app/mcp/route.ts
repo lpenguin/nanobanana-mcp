@@ -3,8 +3,6 @@ import { z } from "zod";
 import { createMcpHandler } from "mcp-handler";
 import { GoogleGenAI } from "@google/genai";
 import { put } from "@vercel/blob";
-import * as fs from "fs";
-import * as path from "path";
 
 // Helper type for extracting inline data from Gemini responses
 interface InlineDataPart {
@@ -13,13 +11,6 @@ interface InlineDataPart {
     data: string;
   };
 }
-
-const MIME_TYPE_MAP: Record<string, string> = {
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".webp": "image/webp",
-};
 
 const googleApiKeyStorage = new AsyncLocalStorage<string | null>();
 
@@ -140,8 +131,7 @@ const baseHandler = createMcpHandler(
       "edit_image",
       "Edit an existing image using text prompts with Google's Gemini image model. The edited image is uploaded to Vercel Blob and the URL is returned.",
       {
-        inputPath: z.string().optional().describe("Path to the input image file (required if imageUrl is not provided)"),
-        imageUrl: z.string().optional().describe("URL of the input image (data URL or real URL). Required if inputPath is not provided."),
+        imageUrl: z.string().describe("URL of the input image (data URL or real URL)."),
         prompt: z
           .string()
           .describe(
@@ -149,25 +139,8 @@ const baseHandler = createMcpHandler(
           ),
         model: modelSchema,
       },
-      async ({ inputPath, imageUrl, prompt, model }) => {
-        let base64Image: string;
-        let mimeType: string;
-
-        if (imageUrl) {
-          const loaded = await loadImageFromUrl(imageUrl);
-          base64Image = loaded.base64;
-          mimeType = loaded.mimeType;
-        } else if (inputPath) {
-          if (!fs.existsSync(inputPath)) {
-            throw new Error(`Input file not found: ${inputPath}`);
-          }
-          const imageData = fs.readFileSync(inputPath);
-          base64Image = imageData.toString("base64");
-          const ext = path.extname(inputPath).toLowerCase();
-          mimeType = MIME_TYPE_MAP[ext] || "image/png";
-        } else {
-          throw new Error("Either inputPath or imageUrl must be provided");
-        }
+      async ({ imageUrl, prompt, model }) => {
+        const { base64: base64Image, mimeType } = await loadImageFromUrl(imageUrl);
 
         const genai = getGeminiClient();
         const result = await genai.models.generateContent({
@@ -199,14 +172,9 @@ const baseHandler = createMcpHandler(
       "composite_images",
       "Combine multiple images into a single composition using text prompts with Google's Gemini image model. The composite image is uploaded to Vercel Blob and the URL is returned.",
       {
-        imagePaths: z
-          .array(z.string())
-          .optional()
-          .describe("Array of paths to input images (up to 3 images recommended). Required if imageUrls is not provided."),
         imageUrls: z
           .array(z.string())
-          .optional()
-          .describe("Array of image URLs (data URLs or real URLs) to use as input (up to 3 images recommended). Required if imagePaths is not provided."),
+          .describe("Array of image URLs (data URLs or real URLs) to use as input (up to 3 images recommended)."),
         prompt: z
           .string()
           .describe(
@@ -214,33 +182,18 @@ const baseHandler = createMcpHandler(
           ),
         model: modelSchema,
       },
-      async ({ imagePaths = [], imageUrls = [], prompt, model }) => {
-        if (imagePaths.length === 0 && imageUrls.length === 0) {
-          throw new Error("Either imagePaths or imageUrls must be provided");
+      async ({ imageUrls, prompt, model }) => {
+        if (imageUrls.length === 0) {
+          throw new Error("imageUrls must contain at least one URL");
         }
 
-        for (const imagePath of imagePaths) {
-          if (!fs.existsSync(imagePath)) {
-            throw new Error(`Input file not found: ${imagePath}`);
-          }
-        }
-
-        const totalImages = imagePaths.length + imageUrls.length;
-        if (totalImages > 3) {
+        if (imageUrls.length > 3) {
           console.warn(
             "Warning: More than 3 images provided. Model works best with up to 3 images."
           );
         }
 
         const parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [{ text: prompt }];
-
-        for (const imagePath of imagePaths) {
-          const imageData = fs.readFileSync(imagePath);
-          const base64Image = imageData.toString("base64");
-          const ext = path.extname(imagePath).toLowerCase();
-          const mimeType = MIME_TYPE_MAP[ext] || "image/png";
-          parts.push({ inlineData: { mimeType, data: base64Image } });
-        }
 
         for (const imageUrl of imageUrls) {
           const { base64, mimeType } = await loadImageFromUrl(imageUrl);
