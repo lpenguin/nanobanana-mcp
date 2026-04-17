@@ -18,11 +18,13 @@ interface InlineDataPart {
   };
 }
 
+const ASPECT_RATIO_ENUM = ["1:1", "1:4", "1:8", "2:3", "3:2", "3:4", "4:1", "4:3", "4:5", "5:4", "8:1", "9:16", "16:9", "21:9"] as const;
+type AspectRatio = typeof ASPECT_RATIO_ENUM[number];
 // Types for tool arguments
 interface GenerateImageArgs {
   prompt: string;
   outputPath: string;
-  aspectRatio?: "1:1" | "2:3" | "3:2" | "3:4" | "4:3" | "4:5" | "5:4" | "9:16" | "16:9" | "21:9";
+  aspectRatio?: AspectRatio;
 }
 
 interface EditImageArgs {
@@ -30,7 +32,7 @@ interface EditImageArgs {
   imageUrl?: string;
   prompt: string;
   outputPath: string;
-  aspectRatio?: "1:1" | "2:3" | "3:2" | "3:4" | "4:3" | "4:5" | "5:4" | "9:16" | "16:9" | "21:9";
+  aspectRatio?: AspectRatio;
 }
 
 interface CompositeImagesArgs {
@@ -38,7 +40,7 @@ interface CompositeImagesArgs {
   imageUrls?: string[];
   prompt: string;
   outputPath: string;
-  aspectRatio?: "1:1" | "2:3" | "3:2" | "3:4" | "4:3" | "4:5" | "5:4" | "9:16" | "16:9" | "21:9";
+  aspectRatio?: AspectRatio;
 }
 
 async function loadImageFromUrl(imageUrl: string): Promise<{ base64: string; mimeType: string }> {
@@ -78,9 +80,9 @@ const TOOLS: Tool[] = [
         },
         aspectRatio: {
           type: "string",
-          enum: ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"],
-          description: "Aspect ratio for the generated image (default: 1:1)",
-          default: "1:1",
+          enum: ASPECT_RATIO_ENUM,
+          description: "Aspect ratio for the generated image (default: 4:3)",
+          default: "4:3",
         },
       },
       required: ["prompt", "outputPath"],
@@ -110,7 +112,7 @@ const TOOLS: Tool[] = [
         },
         aspectRatio: {
           type: "string",
-          enum: ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"],
+          enum: ASPECT_RATIO_ENUM,
           description: "Aspect ratio for the output image (default: matches input)",
         },
       },
@@ -147,9 +149,9 @@ const TOOLS: Tool[] = [
         },
         aspectRatio: {
           type: "string",
-          enum: ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"],
-          description: "Aspect ratio for the output image (default: 1:1)",
-          default: "1:1",
+          enum: ASPECT_RATIO_ENUM,
+          description: "Aspect ratio for the output image (default: 4:3)",
+          default: "4:3",
         },
       },
       required: ["prompt", "outputPath"],
@@ -229,13 +231,18 @@ class NanobananaImageMCPServer {
   }
 
   private async generateImage(args: GenerateImageArgs) {
-    const { prompt, outputPath, aspectRatio = "1:1" } = args;
+    const { prompt, outputPath, aspectRatio = "4:3" } = args;
 
     const genai = this.getGeminiClient();
 
     const result = await genai.models.generateContent({
       model: "gemini-2.5-flash-image-preview",
       contents: prompt,
+      config: {
+        imageConfig: {
+          aspectRatio,
+        },
+      },
     });
 
     const response = result;
@@ -283,7 +290,7 @@ class NanobananaImageMCPServer {
   }
 
   private async editImage(args: EditImageArgs) {
-    const { inputPath, imageUrl, prompt, outputPath } = args;
+    const { inputPath, imageUrl, prompt, outputPath, aspectRatio } = args;
 
     let base64Image: string;
     let mimeType: string;
@@ -323,6 +330,7 @@ class NanobananaImageMCPServer {
           },
         },
       ],
+      ...(aspectRatio && { config: { imageConfig: { aspectRatio } } }),
     });
 
     const response = result;
@@ -371,7 +379,7 @@ class NanobananaImageMCPServer {
   }
 
   private async compositeImages(args: CompositeImagesArgs) {
-    const { imagePaths = [], imageUrls = [], prompt, outputPath } = args;
+    const { imagePaths = [], imageUrls = [], prompt, outputPath, aspectRatio = "4:3" } = args;
 
     if (imagePaths.length === 0 && imageUrls.length === 0) {
       throw new Error("Either imagePaths or imageUrls must be provided");
@@ -426,6 +434,11 @@ class NanobananaImageMCPServer {
     const result = await genai.models.generateContent({
       model: "gemini-2.5-flash-image-preview",
       contents: parts,
+      config: {
+        imageConfig: {
+          aspectRatio,
+        },
+      },
     });
 
     const response = result;

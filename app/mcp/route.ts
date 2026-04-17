@@ -75,6 +75,13 @@ function generateFilename(prefix: string): string {
   return `${prefix}-${Date.now()}-${random}.png`;
 }
 
+const ASPECT_RATIO_ENUM = ["1:1", "1:4", "1:8", "2:3", "3:2", "3:4", "4:1", "4:3", "4:5", "5:4", "8:1", "9:16", "16:9", "21:9"] as const;
+
+const aspectRatioSchema = z
+  .enum(ASPECT_RATIO_ENUM)
+  .default("4:3")
+  .describe(`Aspect ratio for the generated image (default: 4:3). Allowed values: ${ASPECT_RATIO_ENUM.join(", ")}`);
+
 const ALLOWED_MODELS = [
   "gemini-3.1-flash-image-preview",
   "gemini-3-pro-image-preview",
@@ -102,12 +109,18 @@ const baseHandler = createMcpHandler(
             "Detailed text description of the image to generate. Be specific about style, composition, lighting, colors, and mood."
           ),
         model: modelSchema,
+        aspectRatio: aspectRatioSchema,
       },
-      async ({ prompt, model }) => {
+      async ({ prompt, model, aspectRatio }) => {
         const genai = getGeminiClient();
         const result = await genai.models.generateContent({
           model,
           contents: prompt,
+          config: {
+            imageConfig: {
+              aspectRatio,
+            },
+          },
         });
 
         if (!result.candidates) {
@@ -181,8 +194,9 @@ const baseHandler = createMcpHandler(
             "Detailed description of how to combine the images. Reference images by their order (first, second, third)."
           ),
         model: modelSchema,
+        aspectRatio: aspectRatioSchema,
       },
-      async ({ imageUrls, prompt, model }) => {
+      async ({ imageUrls, prompt, model, aspectRatio }) => {
         if (imageUrls.length === 0) {
           throw new Error("imageUrls must contain at least one URL");
         }
@@ -204,6 +218,11 @@ const baseHandler = createMcpHandler(
         const result = await genai.models.generateContent({
           model,
           contents: parts,
+          config: {
+            imageConfig: {
+              aspectRatio,
+            },
+          },
         });
 
         if (!result.candidates) {
