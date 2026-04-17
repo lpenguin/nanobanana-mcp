@@ -41,6 +41,12 @@ interface CompositeImagesArgs {
   aspectRatio?: "1:1" | "2:3" | "3:2" | "3:4" | "4:3" | "4:5" | "5:4" | "9:16" | "16:9" | "21:9";
 }
 
+interface AnalyzeImageArgs {
+  imagePath?: string;
+  imageUrl?: string;
+  prompt: string;
+}
+
 async function loadImageFromUrl(imageUrl: string): Promise<{ base64: string; mimeType: string }> {
   if (imageUrl.startsWith("data:")) {
     const match = imageUrl.match(/^data:([^;]+);base64,(.+)$/);
@@ -155,6 +161,28 @@ const TOOLS: Tool[] = [
       required: ["prompt", "outputPath"],
     },
   },
+  {
+    name: "analyze_image",
+    description: "Analyze an image using Google's Gemini model and return a text description or answer to a question about the image.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        imagePath: {
+          type: "string",
+          description: "Path to the input image file (required if imageUrl is not provided)",
+        },
+        imageUrl: {
+          type: "string",
+          description: "URL of the input image (data URL or real URL). Required if imagePath is not provided.",
+        },
+        prompt: {
+          type: "string",
+          description: "Question or instruction about the image, e.g. 'Describe this image' or 'What objects are in the image?'",
+        },
+      },
+      required: ["prompt"],
+    },
+  },
 ];
 
 // Server implementation
@@ -210,6 +238,8 @@ class NanobananaImageMCPServer {
             return await this.editImage(args as unknown as EditImageArgs);
           case "composite_images":
             return await this.compositeImages(args as unknown as CompositeImagesArgs);
+          case "analyze_image":
+            return await this.analyzeImage(args as unknown as AnalyzeImageArgs);
           default:
             throw new Error(`Unknown tool: ${name}`);
         }
@@ -468,6 +498,82 @@ class NanobananaImageMCPServer {
         {
           type: "text",
           text: `Composite image saved to: ${outputPath}\nInput images: ${allInputs.join(", ")}\nComposition: ${prompt}`,
+        },
+      ],
+    };
+  }
+
+  private async analyzeImage(args: AnalyzeImageArgs) {
+    const { imagePath, imageUrl, prompt } = args;
+
+    let base64Image: string;
+    let mimeType: string;
+
+    if (imageUrl) {
+      const loaded = await loadImageFromUrl(imageUrl);
+      base64Image = loaded.base64;
+      mimeType = loaded.mimeType;
+    } else if (imagePath) {
+      if (!fs.existsSync(imagePath)) {
+        throw new Error(`Input file not found: ${imagePath}`);
+      }
+      const imageData = fs.readFileSync(imagePath);
+      base64Image = imageData.toString("base64");
+      const ext = path.extname(imagePath).toLowerCase();
+      const mimeTypeMap: Record<string, string> = {
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".webp": "image/webp",
+      };
+      mimeType = mimeTypeMap[ext] || "image/png";
+    } else {
+      throw new Error("Either imagePath or imageUrl must be provided");
+    }
+
+    const genai = this.getGeminiClient();
+
+    const result = await genai.models.generateContent({
+      model: "gemini-2.5-flash-image-preview",
+      contents: [
+        { text: prompt },
+        {
+          inlineData: {
+            mimeType: mimeType,
+            data: base64Image,
+          },
+        },
+      ],
+      config: {
+        responseModalities: ["Text"],
+      },
+    });
+
+    const response = result;
+
+    if (!response.candidates || response.candidates.length === 0) {
+      throw new Error("No candidates returned from Gemini API");
+    }
+
+    const candidate = response.candidates[0];
+    if (!candidate.content || !candidate.content.parts) {
+      throw new Error("No content in response from Gemini API");
+    }
+
+    // Extract text from response
+    const textParts = candidate.content.parts
+      .filter((part: any) => typeof part.text === "string")
+      .map((part: any) => part.text as string);
+
+    if (textParts.length === 0) {
+      throw new Error("No text response returned from Gemini API");
+    }
+
+    return {
+      content: [
+        {
+          type: "text",
+          text: textParts.join("\n"),
         },
       ],
     };
