@@ -12,6 +12,11 @@ interface InlineDataPart {
   };
 }
 
+// Helper type for extracting text from Gemini responses
+interface TextPart {
+  text?: string;
+}
+
 const googleApiKeyStorage = new AsyncLocalStorage<string | null>();
 
 function getGeminiClient(): GoogleGenAI {
@@ -217,6 +222,61 @@ const baseHandler = createMcpHandler(
             {
               type: "text" as const,
               text: url,
+            },
+          ],
+        };
+      }
+    );
+
+    server.tool(
+      "analyze_image",
+      "Analyze an image using Google's Gemini model and return a text description or answer to a question about the image.",
+      {
+        imageUrl: z.string().describe("URL of the input image (data URL or real URL)."),
+        prompt: z
+          .string()
+          .describe(
+            "Question or instruction about the image, e.g. 'Describe this image' or 'What objects are in the image?'"
+          ),
+        model: modelSchema,
+      },
+      async ({ imageUrl, prompt, model }) => {
+        const { base64, mimeType } = await loadImageFromUrl(imageUrl);
+
+        const genai = getGeminiClient();
+        const result = await genai.models.generateContent({
+          model,
+          contents: [
+            { text: prompt },
+            { inlineData: { mimeType, data: base64 } },
+          ],
+          config: {
+            responseModalities: ["Text"],
+          },
+        });
+
+        if (!result.candidates || result.candidates.length === 0) {
+          throw new Error("No candidates returned from Gemini API");
+        }
+
+        const candidate = result.candidates[0];
+        if (!candidate.content || !candidate.content.parts) {
+          throw new Error("No content in response from Gemini API");
+        }
+
+        const textParts = candidate.content.parts
+          .filter((part): part is TextPart & { text: string } => typeof (part as TextPart).text === "string")
+          .map((part) => part.text);
+
+        if (textParts.length === 0) {
+          throw new Error("No text response returned from Gemini API");
+        }
+
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: textParts.join("\n"),
             },
           ],
         };
