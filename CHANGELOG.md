@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.9](https://github.com/lpenguin/nanobanana-mcp/compare/v0.1.8...v0.1.9) (2026-04-17)
+
+
+### Features
+
+* add analyze_image tool with text-only response ([#9](https://github.com/lpenguin/nanobanana-mcp/issues/9)) ([5a569fa](https://github.com/lpenguin/nanobanana-mcp/commit/5a569fa02d8253f77bd25a10a73fc00e91674f64))
+
 ### [0.1.8](https://github.com/lpenguin/nanobanana-mcp/compare/v0.1.7...v0.1.8) (2026-04-16)
 
 ### [0.1.7](https://github.com/lpenguin/nanobanana-mcp/compare/v0.1.6...v0.1.7) (2026-04-15)
