@@ -76,12 +76,12 @@ function generateFilename(prefix: string): string {
 }
 
 const ALLOWED_MODELS = [
-  "gemini-3.1-flash-image-preview",
-  "gemini-3-pro-image-preview",
-  "gemini-2.5-flash-image",
+  "gemini-3.1-flash-lite-image",
+  "gemini-3.1-flash-image",
+  "gemini-3-pro-image",
 ] as const;
 
-const DEFAULT_MODEL = "gemini-3.1-flash-image-preview";
+const DEFAULT_MODEL = "gemini-3.1-flash-image";
 
 const modelSchema = z
   .enum(ALLOWED_MODELS)
